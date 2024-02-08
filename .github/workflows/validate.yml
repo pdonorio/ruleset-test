@@ -1,0 +1,43 @@
+name: Validate any PR Description
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+env:
+  RENOVATE_AUTHOR: "renovate-github-actions[bot]"
+
+jobs:
+
+  validate-description:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+
+    steps:
+
+      - name: Filter changeset to be required
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            match:
+              - '!docs/**'
+
+      - name: Debug author of pull request
+        if: steps.changes.outputs.match == 'true'
+        run: echo "Pull request author is ${{ github.event.pull_request.user.login }}"
+
+      - name: Validate there are no comments in pull request description
+        # NOTE: do not run if it's a bump from Renovate, which uses comments in the PR description
+        if: ${{ steps.changes.outputs.match == 'true' && github.event.pull_request.user.login != env.RENOVATE_AUTHOR }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const forbiddenWords = ['<!--', '-->', 'PTP-XXXX'];
+            const prDescription = context.payload.pull_request.body;
+            for (const word of forbiddenWords) {
+              if (prDescription.includes(word)) {
+                core.setFailed(`Please make sure to remove "${word}" found in your Pull Request description`);
+              }
+            }
